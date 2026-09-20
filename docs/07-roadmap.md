@@ -97,7 +97,15 @@ message naming the prompts involved rather than a stack overflow; and one templa
 
 ---
 
-## M4 · Conversations and follow-ups
+## M4 · Conversations and follow-ups — **done (2026-09-21, Windows only)**
+
+> 327 tests passing, ruff clean. Every fill saves into an auto-named thread; values merge by blank name; a thread
+> is searchable by its content and appears when browsing; "Continue with…" pre-fills the next template from what
+> the thread already knows. `Ctrl+S` saves the clipboard into a named value — how the comment you actually posted
+> gets back in.
+>
+> The flow F5 describes is covered end to end by `test_the_follow_up_fills_itself`: comment, save what you posted,
+> copy their reply, continue — and **two of the three fields fill themselves**. **Not yet run on Linux.**
 
 - Every fill saves into a conversation — created automatically, labelled from the longest value, editable.
 - Values merge by blank name; later fills overwrite, history retains.

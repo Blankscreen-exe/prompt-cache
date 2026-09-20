@@ -143,9 +143,13 @@ later edit to that block does not rewrite what a past fill recorded.
 A thread of related fills — one post and its replies (D27).
 
 - **Created automatically** by the first fill of a template. No naming required. The label is derived from the
-  longest text value in the fill, truncated to roughly eight words. Editable.
+  **longest** value in the fill, truncated to roughly eight words, and follows the content as the thread grows —
+  until the user sets one by hand, after which it stays put. Ties break on the blank name so the label is
+  deterministic.
 - Holds a **merged map of values** by blank name, built from its fills plus anything added directly. Later fills
   overwrite earlier values of the same name; the fill history keeps the old ones.
+- **An empty value never erases what the thread knows.** A follow-up template with a blank field leaves the
+  existing value alone, rather than wiping the thread's memory of it.
 - **Continue with…** — pick another template; its blanks pre-fill from the conversation by name. This is what
   makes reply-to-a-reply nearly free, and it is why **consistent blank naming across your templates matters**.
 - The user can **set a value from the clipboard** at any time (for example, saving the comment they actually

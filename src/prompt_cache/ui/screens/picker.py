@@ -1,8 +1,8 @@
-"""Pick a block to include.
+"""A searchable prompt picker.
 
-The roadmap asked for autocomplete on `{{@` in the editor. A searchable picker does the
-same job better in a terminal: no popup chasing the cursor, no guessing when to trigger,
-and it doubles as a way to see what blocks exist at all.
+Used twice: choosing a block to include from the editor, and choosing the next template
+when continuing a thread. Both are "find one prompt, fast", which is what the palette
+already does — so this is the same idea in a modal.
 """
 
 from __future__ import annotations
@@ -18,11 +18,13 @@ from textual.screen import ModalScreen
 from textual.widgets import Input, OptionList, Static
 from textual.widgets.option_list import Option
 
+from prompt_cache.core.models import Prompt
+from prompt_cache.core.parser import parse
 from prompt_cache.store import prompts as prompt_store
 
 
-class BlockPicker(ModalScreen[str | None]):
-    """Choose a prompt to include. Dismisses with its slug, or None."""
+class PromptPicker(ModalScreen[Prompt | None]):
+    """Choose a prompt. Dismisses with it, or with None."""
 
     BINDINGS: ClassVar[list[Binding]] = [
         Binding("escape", "cancel", "cancel", priority=True),
@@ -30,14 +32,22 @@ class BlockPicker(ModalScreen[str | None]):
         Binding("up", "cursor_up", "", show=False, priority=True),
     ]
 
-    def __init__(self, exclude_id: str | None = None) -> None:
+    def __init__(
+        self,
+        *,
+        title: str = "Pick a prompt",
+        exclude_id: str | None = None,
+        templates_first: bool = False,
+    ) -> None:
         super().__init__()
+        self.picker_title = title
         self.exclude_id = exclude_id
+        self.templates_first = templates_first
 
     def compose(self) -> ComposeResult:
         with Vertical(id="picker"):
-            yield Static(Text("Include a block", style="bold"), id="picker-title")
-            yield Input(placeholder="Filter blocks…", id="picker-filter")
+            yield Static(Text(self.picker_title, style="bold"), id="picker-title")
+            yield Input(placeholder="Filter…", id="picker-filter")
             yield OptionList(id="picker-list")
 
     def on_mount(self) -> None:
@@ -48,27 +58,37 @@ class BlockPicker(ModalScreen[str | None]):
     def _list(self) -> OptionList:
         return self.query_one("#picker-list", OptionList)
 
-    def refresh_list(self) -> None:
+    def _candidates(self) -> list[Prompt]:
         query = self.query_one("#picker-filter", Input).value.strip().lower()
-        self._list.clear_options()
-
-        candidates = [
+        items = [
             prompt
             for prompt in prompt_store.list_live(self.app.connection)
             if prompt.id != self.exclude_id
             and (not query or query in prompt.name or query in prompt.title.lower())
         ]
+        if self.templates_first:
+            # A thread is continued with a template; a plain prompt has nothing to fill.
+            items.sort(key=lambda p: (not parse(p.body).is_template, -p.use_count))
+        return items
+
+    def refresh_list(self) -> None:
+        self._list.clear_options()
+        candidates = self._candidates()
         if not candidates:
             self._list.add_option(
-                Option(Text("No blocks match", style="dim italic"), disabled=True)
+                Option(Text("Nothing matches", style="dim italic"), disabled=True)
             )
             return
 
         for prompt in candidates:
             row = Text(no_wrap=True, overflow="ellipsis")
-            row.append(f"@{prompt.name}", style="bold cyan")
-            row.append(f"   {prompt.title}", style="dim")
-            self._list.add_option(Option(row, id=prompt.name))
+            row.append(prompt.title, style="bold")
+            template = parse(prompt.body)
+            if template.blanks:
+                count = len(template.blanks)
+                row.append(f"   {count} blank{'s' if count != 1 else ''}", style="dim")
+            row.append(f"   @{prompt.name}", style="cyan")
+            self._list.add_option(Option(row, id=prompt.id))
         self._list.highlighted = 0
 
     @on(Input.Changed, "#picker-filter")
@@ -89,8 +109,11 @@ class BlockPicker(ModalScreen[str | None]):
         if index is None:
             return
         option = self._list.get_option_at_index(index)
-        if option.id:
-            self.dismiss(option.id)
+        if not option.id:
+            return
+        prompt = prompt_store.get(self.app.connection, option.id)
+        if prompt is not None:
+            self.dismiss(prompt)
 
     def action_cursor_down(self) -> None:
         self._list.action_cursor_down()

@@ -12,8 +12,8 @@ from prompt_cache import clipboard
 from prompt_cache.store import prompts as prompt_store
 from prompt_cache.store.db import database
 from prompt_cache.ui.app import PromptCacheApp
-from prompt_cache.ui.screens.blocks import BlockPicker
 from prompt_cache.ui.screens.editor import EditorScreen
+from prompt_cache.ui.screens.picker import PromptPicker
 
 
 @pytest.fixture
@@ -181,7 +181,7 @@ class TestBlockPicker:
 
             await pilot.press("ctrl+b")
             await pilot.pause()
-            assert isinstance(app.screen, BlockPicker)
+            assert isinstance(app.screen, PromptPicker)
 
             await pilot.press(*"me-pro")
             await pilot.pause()
