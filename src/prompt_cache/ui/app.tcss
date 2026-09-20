@@ -157,3 +157,35 @@ BlockPicker {
     border: round $primary;
     padding: 0 1;
 }
+
+/* ---- history & settings ---- */
+
+#history-main, #settings-main {
+    height: 1fr;
+    padding: 1 2 0 2;
+}
+
+#history-title, #settings-title, #settings-status {
+    padding: 0 1 1 1;
+}
+
+#history-list {
+    height: auto;
+    max-height: 10;
+    border: none;
+}
+
+#history-diff, #settings-body {
+    height: 1fr;
+    border: round $primary;
+    padding: 0 1;
+}
+
+#settings-path {
+    border: tall $primary;
+    background: $boost;
+}
+
+#settings-path:focus {
+    border: tall $accent;
+}

@@ -40,6 +40,21 @@ class Prompt:
 
 
 @dataclass(frozen=True, slots=True)
+class Version:
+    """A prompt's body as it was at a point in time.
+
+    History holds what a prompt *used to be*; the current state is the prompt itself,
+    so nothing is stored twice.
+    """
+
+    id: str
+    prompt_id: str
+    title: str
+    body: str
+    created_at: datetime | None = None
+
+
+@dataclass(frozen=True, slots=True)
 class Conversation:
     """A thread of fills — one post and its replies (D27).
 

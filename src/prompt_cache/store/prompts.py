@@ -8,11 +8,11 @@ from __future__ import annotations
 
 import sqlite3
 from dataclasses import replace
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 from ulid import ULID
 
-from prompt_cache.core.models import Prompt
+from prompt_cache.core.models import Prompt, Version
 from prompt_cache.core.slug import extract_tags, make_slug, title_from_body
 
 
@@ -27,6 +27,84 @@ def _parse(value: str | None) -> datetime | None:
 def new_id() -> str:
     """A ULID: lexicographically sortable by creation time."""
     return str(ULID())
+
+
+# Typing must not create hundreds of versions, so a burst of edits snapshots once.
+VERSION_INTERVAL = timedelta(seconds=30)
+
+
+def _row_to_version(row: sqlite3.Row) -> Version:
+    return Version(
+        id=row["id"],
+        prompt_id=row["prompt_id"],
+        title=row["title"],
+        body=row["body"],
+        created_at=_parse(row["created_at"]),
+    )
+
+
+def versions_for(conn: sqlite3.Connection, prompt_id: str) -> list[Version]:
+    """Past states of a prompt, newest first."""
+    rows = conn.execute(
+        "SELECT * FROM prompt_versions WHERE prompt_id = ? ORDER BY created_at DESC, id DESC",
+        (prompt_id,),
+    ).fetchall()
+    return [_row_to_version(row) for row in rows]
+
+
+def latest_version(conn: sqlite3.Connection, prompt_id: str) -> Version | None:
+    versions = versions_for(conn, prompt_id)
+    return versions[0] if versions else None
+
+
+def snapshot(conn: sqlite3.Connection, prompt: Prompt) -> Version:
+    """Record a prompt's current state as a version."""
+    version = Version(
+        id=new_id(),
+        prompt_id=prompt.id,
+        title=prompt.title,
+        body=prompt.body,
+        created_at=_parse(_now()),
+    )
+    conn.execute(
+        "INSERT INTO prompt_versions (id, prompt_id, title, body, created_at)"
+        " VALUES (?, ?, ?, ?, ?)",
+        (version.id, version.prompt_id, version.title, version.body, _now()),
+    )
+    return version
+
+
+def _maybe_snapshot(conn: sqlite3.Connection, prompt: Prompt, *, force: bool) -> None:
+    """Snapshot the state we are about to overwrite, debounced.
+
+    The first change to a prompt always snapshots, so the original is never lost; after
+    that, at most one version per VERSION_INTERVAL of continuous editing.
+    """
+    last = latest_version(conn, prompt.id)
+    if last is None or force:
+        snapshot(conn, prompt)
+        return
+    if last.created_at is None:  # pragma: no cover - defensive
+        snapshot(conn, prompt)
+        return
+    if datetime.now(UTC) - last.created_at >= VERSION_INTERVAL:
+        snapshot(conn, prompt)
+
+
+def restore_version(conn: sqlite3.Connection, prompt_id: str, version_id: str) -> Prompt:
+    """Bring an old body back. Creates a version first, so nothing is destroyed."""
+    prompt = get(conn, prompt_id)
+    if prompt is None:
+        raise KeyError(prompt_id)
+    row = conn.execute(
+        "SELECT * FROM prompt_versions WHERE id = ? AND prompt_id = ?",
+        (version_id, prompt_id),
+    ).fetchone()
+    if row is None:
+        raise KeyError(version_id)
+
+    snapshot(conn, prompt)
+    return update_body(conn, prompt_id, row["body"], force_version=False)
 
 
 def _row_to_prompt(row: sqlite3.Row, tags: tuple[str, ...] = ()) -> Prompt:
@@ -87,6 +165,11 @@ def _sync_derived(conn: sqlite3.Connection, prompt: Prompt) -> None:
         )
 
 
+def reindex(conn: sqlite3.Connection, prompt: Prompt) -> None:
+    """Rebuild the derived rows for one prompt. Used after restoring a backup."""
+    _sync_derived(conn, prompt)
+
+
 def create(conn: sqlite3.Connection, body: str, *, title: str | None = None) -> Prompt:
     """Save a new prompt. Title and slug come from the body unless `title` is given."""
     now = _now()
@@ -130,7 +213,9 @@ def get_by_name(conn: sqlite3.Connection, name: str) -> Prompt | None:
     return _row_to_prompt(row, _tags_for(conn, row["id"])) if row else None
 
 
-def update_body(conn: sqlite3.Connection, prompt_id: str, body: str) -> Prompt:
+def update_body(
+    conn: sqlite3.Connection, prompt_id: str, body: str, *, force_version: bool = False
+) -> Prompt:
     """Autosave. The title follows the first line unless the user overrode it.
 
     The slug is deliberately *not* regenerated: includes (`{{@name}}`) point at it, so
@@ -139,6 +224,9 @@ def update_body(conn: sqlite3.Connection, prompt_id: str, body: str) -> Prompt:
     existing = get(conn, prompt_id)
     if existing is None:
         raise KeyError(prompt_id)
+
+    if existing.body != body:
+        _maybe_snapshot(conn, existing, force=force_version)
 
     title = existing.title if existing.title_is_custom else title_from_body(body)
     now = _now()
