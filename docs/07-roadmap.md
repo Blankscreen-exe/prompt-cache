@@ -118,7 +118,19 @@ reply comes from the clipboard, and nothing needed naming along the way.
 
 ---
 
-## M5 · Safety, packs and polish
+## M5 · Safety, packs and polish — **done (2026-09-21, Windows only)**
+
+> 370 tests passing, ruff clean. Debounced version history with a diff view and restore that never destroys what
+> it replaced; template packs as plain Markdown plus a manifest, with a collision preview; a full JSON backup that
+> round-trips and rebuilds the search index; an example pack offered once on an empty database.
+>
+> Editor syntax highlighting resolved as far as it can be: `register_language` needs a compiled tree-sitter
+> grammar, so `{{blanks}}` cannot be coloured cheaply. The editor uses bundled markdown highlighting and reports
+> structure in its meta line instead. Recorded in 04-ui.md.
+>
+> **A regression worth remembering:** an editor attribute named `_closing` shadowed `MessagePump._closing` and
+> hung the whole app with no traceback. Renamed, and `TestFrameworkAttributeCollisions` now guards every screen.
+> **Not yet run on Linux.**
 
 - Versions with debounce, a diff view, restore.
 - Template pack export and import, with a collision preview.

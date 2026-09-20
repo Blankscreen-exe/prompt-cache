@@ -36,6 +36,7 @@ class EditorScreen(Screen[None]):
         Binding("ctrl+s", "save_now", "save", priority=True),
         Binding("ctrl+r", "copy_raw", "copy raw", priority=True),
         Binding("ctrl+b", "insert_block", "include block", priority=True),
+        Binding("ctrl+h", "history", "history", priority=True),
     ]
 
     def __init__(self, prompt_id: str) -> None:
@@ -43,13 +44,23 @@ class EditorScreen(Screen[None]):
         self.prompt_id = prompt_id
         self._timer = None
         self._dirty = False
+        # NOT `_closing`: Textual's MessagePump owns that attribute, and setting
+        # it tells the widget its message pump is shutting down, which hangs the
+        # whole app. Found the hard way.
+        self._flushing_on_close = False
 
     def compose(self) -> ComposeResult:
         prompt = prompt_store.get(self.app.connection, self.prompt_id)
         body = prompt.body if prompt else ""
         with Vertical(id="editor-main"):
             yield Static(id="editor-meta")
-            yield TextArea(body, id="editor-body", soft_wrap=True, tab_behavior="indent")
+            yield TextArea(
+                body,
+                id="editor-body",
+                soft_wrap=True,
+                tab_behavior="indent",
+                language="markdown",
+            )
         yield Footer()
 
     def on_mount(self) -> None:
@@ -72,7 +83,9 @@ class EditorScreen(Screen[None]):
             return
         body = self.query_one("#editor-body", TextArea).text
         try:
-            prompt_store.update_body(self.app.connection, self.prompt_id, body)
+            prompt_store.update_body(
+                self.app.connection, self.prompt_id, body, force_version=self._flushing_on_close
+            )
         except KeyError:
             # The prompt was deleted from under us; nothing to save into.
             self._dirty = False
@@ -125,6 +138,7 @@ class EditorScreen(Screen[None]):
         """Esc: flush the pending autosave before leaving, so nothing is lost."""
         if self._timer is not None:
             self._timer.stop()
+        self._flushing_on_close = True
         self._save()
         self._discard_if_empty()
         self.dismiss(None)
@@ -154,6 +168,22 @@ class EditorScreen(Screen[None]):
         self.app.push_screen(
             PromptPicker(title="Include a block", exclude_id=self.prompt_id), insert
         )
+
+    def action_history(self) -> None:
+        from prompt_cache.ui.screens.history import HistoryScreen
+
+        self._save()
+
+        def reload(_result) -> None:
+            prompt = prompt_store.get(self.app.connection, self.prompt_id)
+            if prompt is not None:
+                area = self.query_one("#editor-body", TextArea)
+                if area.text != prompt.body:
+                    self._dirty = False
+                    area.text = prompt.body
+            self._refresh_meta()
+
+        self.app.push_screen(HistoryScreen(self.prompt_id), reload)
 
     def action_copy_raw(self) -> None:
         self._save()

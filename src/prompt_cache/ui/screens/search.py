@@ -20,12 +20,14 @@ from textual.widgets.option_list import Option
 from prompt_cache import clipboard
 from prompt_cache.core.models import Prompt, SearchHit
 from prompt_cache.core.parser import parse
+from prompt_cache.packs import examples as example_pack
 from prompt_cache.store import prompts as prompt_store
 from prompt_cache.store import search as search_store
 
 CREATE_ID = "__create__"
 HEADER_PREFIX = "__header__"
 THREAD_PREFIX = "__thread__"
+EXAMPLES_ID = "__examples__"
 
 
 def _thread_row(hit: SearchHit) -> Text:
@@ -76,6 +78,7 @@ class SearchScreen(Screen):
         Binding("ctrl+e", "edit", "edit", priority=True),
         Binding("ctrl+p", "pin", "pin", priority=True),
         Binding("ctrl+t", "trash", "trash", priority=True),
+        Binding("ctrl+comma", "settings", "settings", priority=True),
         Binding("ctrl+d", "delete", "delete", priority=True),
         Binding("down", "cursor_down", "", show=False),
         Binding("up", "cursor_up", "", show=False),
@@ -124,6 +127,13 @@ class SearchScreen(Screen):
                 else:
                     options.append(Option(_row(hit.prompt), id=hit.prompt.id))
 
+        if not self._query.strip() and example_pack.should_offer(self.app.connection):
+            offer = Text(no_wrap=True, overflow="ellipsis")
+            offer.append("+ ", style="bold green")
+            offer.append("Start from the example prompts")
+            offer.append("   a shape to edit, not a voice to adopt", style="dim italic")
+            options.append(Option(offer, id=EXAMPLES_ID))
+
         if results.create_label:
             label = Text(no_wrap=True, overflow="ellipsis")
             label.append("+ ", style="bold green")
@@ -148,7 +158,9 @@ class SearchScreen(Screen):
         if index is None:
             return None
         option = self._results.get_option_at_index(index)
-        if option.id in (None, CREATE_ID) or option.id.startswith((HEADER_PREFIX, THREAD_PREFIX)):
+        if option.id in (None, CREATE_ID, EXAMPLES_ID) or option.id.startswith(
+            (HEADER_PREFIX, THREAD_PREFIX)
+        ):
             return None
         return prompt_store.get(self.app.connection, option.id)
 
@@ -180,6 +192,14 @@ class SearchScreen(Screen):
         option = self._results.get_option_at_index(index)
         if option.id == CREATE_ID:
             self.action_new_prompt(self._query)
+            return
+        if option.id == EXAMPLES_ID:
+            result = example_pack.install_examples(self.app.connection)
+            self.notify(
+                f"Added {result.imported} example prompts — open one and make it yours",
+                timeout=6,
+            )
+            self.refresh_results()
             return
         if option.id and option.id.startswith(THREAD_PREFIX):
             self._open_thread(option.id[len(THREAD_PREFIX) :])
@@ -252,6 +272,11 @@ class SearchScreen(Screen):
         from prompt_cache.ui.screens.trash import TrashScreen
 
         self.app.push_screen(TrashScreen(), lambda _: self._after_edit())
+
+    def action_settings(self) -> None:
+        from prompt_cache.ui.screens.settings import SettingsScreen
+
+        self.app.push_screen(SettingsScreen(), lambda _: self._after_edit())
 
     def action_clear(self) -> None:
         search = self.query_one("#search", Input)

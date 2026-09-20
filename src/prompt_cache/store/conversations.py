@@ -73,6 +73,11 @@ def _row_to_conversation(conn: sqlite3.Connection, row: sqlite3.Row) -> Conversa
     )
 
 
+def reindex(conn: sqlite3.Connection, conversation: Conversation) -> None:
+    """Rebuild the search entry for one thread. Used after restoring a backup."""
+    _sync_fts(conn, conversation)
+
+
 def create(
     conn: sqlite3.Connection,
     values: dict[str, str] | None = None,

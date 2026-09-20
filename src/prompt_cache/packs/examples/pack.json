@@ -1,0 +1,63 @@
+{
+  "pack_version": 1,
+  "name": "prompt-cache examples",
+  "description": "A starting shape, not a starting voice. Every block here is placeholder text - open them and write your own.",
+  "prompts": [
+    {
+      "name": "social-voice",
+      "title": "Social voice",
+      "title_is_custom": false,
+      "pinned": false,
+      "tags": [],
+      "file": "prompts/social-voice.md"
+    },
+    {
+      "name": "about-me",
+      "title": "About me",
+      "title_is_custom": false,
+      "pinned": false,
+      "tags": [],
+      "file": "prompts/about-me.md"
+    },
+    {
+      "name": "about-my-work",
+      "title": "About my work",
+      "title_is_custom": false,
+      "pinned": false,
+      "tags": [],
+      "file": "prompts/about-my-work.md"
+    },
+    {
+      "name": "social-comment",
+      "title": "Social comment",
+      "title_is_custom": false,
+      "pinned": true,
+      "tags": [],
+      "file": "prompts/social-comment.md"
+    },
+    {
+      "name": "social-reply",
+      "title": "Social reply",
+      "title_is_custom": false,
+      "pinned": true,
+      "tags": [],
+      "file": "prompts/social-reply.md"
+    },
+    {
+      "name": "email-reply",
+      "title": "Email reply",
+      "title_is_custom": false,
+      "pinned": false,
+      "tags": [],
+      "file": "prompts/email-reply.md"
+    },
+    {
+      "name": "proposal",
+      "title": "Proposal",
+      "title_is_custom": false,
+      "pinned": false,
+      "tags": [],
+      "file": "prompts/proposal.md"
+    }
+  ]
+}

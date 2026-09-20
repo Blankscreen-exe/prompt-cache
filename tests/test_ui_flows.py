@@ -9,6 +9,7 @@ The clipboard is stubbed throughout — a test suite must never clobber the real
 from __future__ import annotations
 
 import asyncio
+import inspect
 from pathlib import Path
 
 import pytest
@@ -311,3 +312,46 @@ class TestBindingsAreNotShadowed:
             assert not shadowed, f"shadowed by the focused Input: {shadowed}"
 
         drive(db_file, scenario, seed=seed_three)
+
+
+class TestFrameworkAttributeCollisions:
+    """Textual's MessagePump owns several private attribute names.
+
+    Shadowing one from a Screen subclass does not error — it silently breaks the
+    widget. `_closing` cost an afternoon: setting it told Textual the message pump was
+    shutting down, and the whole app hung with no traceback.
+    """
+
+    RESERVED = ("_closing", "_running", "_pending_message", "_message_queue", "_parent")
+
+    def test_our_screens_do_not_shadow_message_pump_internals(self):
+        from textual.message_pump import MessagePump
+
+        from prompt_cache.ui.screens.conversation import ConversationScreen
+        from prompt_cache.ui.screens.editor import EditorScreen
+        from prompt_cache.ui.screens.fill import FillScreen
+        from prompt_cache.ui.screens.history import HistoryScreen
+        from prompt_cache.ui.screens.picker import PromptPicker
+        from prompt_cache.ui.screens.search import SearchScreen
+        from prompt_cache.ui.screens.settings import SettingsScreen
+        from prompt_cache.ui.screens.trash import TrashScreen
+
+        owned = set(MessagePump.__init__.__code__.co_names)
+        screens = (
+            SearchScreen,
+            EditorScreen,
+            FillScreen,
+            ConversationScreen,
+            HistoryScreen,
+            SettingsScreen,
+            TrashScreen,
+            PromptPicker,
+        )
+
+        clashes = []
+        for screen in screens:
+            source = inspect.getsource(screen)
+            for name in self.RESERVED:
+                if f"self.{name} =" in source and name in owned:
+                    clashes.append(f"{screen.__name__}.{name}")
+        assert not clashes, f"these shadow Textual internals: {clashes}"
