@@ -17,6 +17,7 @@ from textual.screen import Screen
 from textual.widgets import Footer, Static, TextArea
 
 from prompt_cache import clipboard
+from prompt_cache.core.parser import parse
 from prompt_cache.store import prompts as prompt_store
 
 # Long enough that typing does not thrash the database, short enough that Esc never
@@ -34,6 +35,7 @@ class EditorScreen(Screen[None]):
         Binding("escape", "close", "back", priority=True),
         Binding("ctrl+s", "save_now", "save", priority=True),
         Binding("ctrl+r", "copy_raw", "copy raw", priority=True),
+        Binding("ctrl+b", "insert_block", "include block", priority=True),
     ]
 
     def __init__(self, prompt_id: str) -> None:
@@ -87,6 +89,29 @@ class EditorScreen(Screen[None]):
         line.append(f"   {prompt.name}", style="dim")
         if prompt.tags:
             line.append("   " + " ".join(f"#{tag}" for tag in prompt.tags), style="cyan")
+
+        template = parse(prompt.body)
+        if template.blanks:
+            count = len(template.blanks)
+            line.append(f"   {count} blank{'s' if count != 1 else ''}", style="dim")
+
+        known = set(prompt_store.bodies_by_name(self.app.connection))
+        referenced: list[str] = list(template.includes)
+        for blank in template.blanks:
+            referenced.extend(o.block for o in blank.options if o.block)
+        for block in dict.fromkeys(referenced):
+            missing = block not in known
+            line.append(f"   @{block}", style="bold yellow" if missing else "cyan")
+            if missing:
+                line.append(" (missing)", style="bold yellow")
+
+        users = prompt_store.used_by(self.app.connection, prompt.name, exclude_id=prompt.id)
+        if users:
+            line.append(
+                f"   used by {len(users)} template{'s' if len(users) != 1 else ''}",
+                style="dim",
+            )
+
         line.append("   saved", style="dim italic")
         self.query_one("#editor-meta", Static).update(line)
 
@@ -112,6 +137,21 @@ class EditorScreen(Screen[None]):
         prompt = prompt_store.get(self.app.connection, self.prompt_id)
         if prompt is not None and not prompt.body.strip() and prompt.use_count == 0:
             prompt_store.purge(self.app.connection, self.prompt_id)
+
+    def action_insert_block(self) -> None:
+        """Ctrl+B: pick a block and drop {{@its-name}} in at the cursor."""
+        from prompt_cache.ui.screens.blocks import BlockPicker
+
+        def insert(name: str | None) -> None:
+            if not name:
+                return
+            area = self.query_one("#editor-body", TextArea)
+            area.insert("{{@" + name + "}}")
+            area.focus()
+            self._dirty = True
+            self._save()
+
+        self.app.push_screen(BlockPicker(exclude_id=self.prompt_id), insert)
 
     def action_copy_raw(self) -> None:
         self._save()

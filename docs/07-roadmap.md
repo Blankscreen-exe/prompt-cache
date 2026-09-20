@@ -76,12 +76,21 @@ the flow from "post copied" to "assembled prompt on clipboard" is a handful of k
 
 ---
 
-## M3 · Blocks, includes and choice-of-block
+## M3 · Blocks, includes and choice-of-block — **done (2026-09-21, Windows only)**
+
+> 285 tests passing, ruff clean. Includes resolve recursively; cycles name the whole chain (`a -> b -> a`) and
+> never recurse away; depth caps at 10; blanks inside a block become blanks of the filling template;
+> choice-of-block inserts the chosen block, so one template really does serve both personas. The editor flags
+> missing includes and reports "used by N templates". **Not yet run on Linux.**
+>
+> Substitution: the roadmap asked for autocomplete on `{{@`. Shipped a **searchable block picker** (Ctrl+B)
+> instead — no popup chasing the cursor, and it doubles as a way to see which blocks exist. It refuses to offer
+> the prompt being edited, which would be a one-keypress way to build a cycle.
 
 - `{{@name}}` resolution, nesting, **cycle detection reported by name**, depth cap of 10.
 - `{{persona: @a | @b | none}}` — choice-of-block, resolving the same way once chosen.
 - Blanks inside included blocks surface as blanks of the filling template.
-- Editor: autocomplete for include names, warnings for missing includes, **"used by N templates"**.
+- Editor: a searchable block picker (Ctrl+B), warnings for missing includes, **"used by N templates"**.
 
 **Done when:** editing one block changes the output of every template that includes it; a cycle produces a clear
 message naming the prompts involved rather than a stack overflow; and one template serves both personas.

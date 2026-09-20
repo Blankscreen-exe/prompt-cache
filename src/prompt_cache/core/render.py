@@ -1,15 +1,18 @@
-"""Assembling a filled template into the text that lands on the clipboard.
+"""Resolving includes and assembling a filled template.
 
-Two rules do the interesting work:
+Three rules do the interesting work:
 
+- **Includes are spliced in recursively.** `{{@name}}` pulls another prompt's body in at
+  fill time, and blanks inside that body become blanks of the template being filled.
+- **Cycles are reported, never followed.** A includes B includes A names the whole chain
+  and renders nothing, rather than recursing until the stack gives out.
 - **An empty `optional` blank takes its whole line with it**, so a labelled section
-  disappears cleanly instead of leaving a dangling "MY COMMENT:".
-- Removing a line can strand blank lines, so runs of them collapse to one — but only
-  when something was actually removed, otherwise the author's own spacing is preserved
-  exactly.
+  disappears instead of leaving a dangling "MY COMMENT:". Removing a line can strand
+  blank lines, so runs of them collapse — but only when something was actually removed,
+  otherwise the author's own spacing is preserved exactly.
 
-Pure: no I/O, no database, no Textual. Resolving `{{@includes}}` is M3; until then an
-include renders as nothing and says so.
+Pure: no I/O, no database, no Textual. Block bodies arrive as a plain mapping, so the
+store decides where they come from and this module stays testable on its own.
 """
 
 from __future__ import annotations
@@ -20,6 +23,7 @@ from enum import StrEnum
 
 from prompt_cache.core.parser import (
     Blank,
+    BlankKind,
     BlankRef,
     IncludeRef,
     Literal,
@@ -27,6 +31,9 @@ from prompt_cache.core.parser import (
     TemplateWarning,
     parse,
 )
+
+# Deep enough for any sane nesting, shallow enough to stop runaway structures early.
+MAX_INCLUDE_DEPTH = 10
 
 # Marks a line for removal. A private-use codepoint, so it cannot collide with
 # anything a user pastes in.
@@ -43,16 +50,137 @@ class ValueSource(StrEnum):
 
 
 @dataclass(frozen=True, slots=True)
+class BlockChoiceRef:
+    """A `{{persona: @a | @b}}` blank, with each option already expanded.
+
+    Which branch is emitted depends on the value at render time, so all of them are
+    resolved up front — including their own includes and blanks.
+    """
+
+    name: str
+    branches: tuple[tuple[str, tuple[object, ...]], ...] = ()
+
+    def branch(self, label: str) -> tuple[object, ...] | None:
+        for option_label, tokens in self.branches:
+            if option_label == label:
+                return tokens
+        return None
+
+
+@dataclass(frozen=True, slots=True)
+class ResolvedTemplate:
+    """A template with every include spliced in and every blank collected."""
+
+    tokens: tuple[object, ...] = ()
+    blanks: tuple[Blank, ...] = ()
+    warnings: tuple[TemplateWarning, ...] = ()
+    used_blocks: tuple[str, ...] = ()
+    missing_blocks: tuple[str, ...] = ()
+
+    @property
+    def has_blanks(self) -> bool:
+        return bool(self.blanks)
+
+    def blank(self, name: str) -> Blank | None:
+        canonical = name.lower()
+        for blank in self.blanks:
+            if blank.name == canonical:
+                return blank
+        return None
+
+
+def resolve(template: Template | str, blocks: Mapping[str, str] | None = None) -> ResolvedTemplate:
+    """Splice in every include, collecting blanks and reporting what went wrong.
+
+    `blocks` maps a block's slug to its body. A name that is not in it is reported as a
+    missing include and contributes nothing.
+    """
+    if isinstance(template, str):
+        template = parse(template)
+    blocks = blocks or {}
+
+    warnings = list(template.warnings)
+    blanks: dict[str, Blank] = {blank.name: blank for blank in template.blanks}
+    used: list[str] = []
+    missing: list[str] = []
+
+    def expand_include(name: str, stack: tuple[str, ...]) -> list[object]:
+        if name in stack:
+            chain = " -> ".join([*stack, name])
+            warnings.append(TemplateWarning(f"Include cycle: {chain}", "{{@" + name + "}}"))
+            return []
+        if len(stack) >= MAX_INCLUDE_DEPTH:
+            warnings.append(
+                TemplateWarning(
+                    f"Includes nested more than {MAX_INCLUDE_DEPTH} deep at '@{name}'.",
+                    "{{@" + name + "}}",
+                )
+            )
+            return []
+
+        body = blocks.get(name)
+        if body is None:
+            if name not in missing:
+                missing.append(name)
+                warnings.append(
+                    TemplateWarning(f"Include '@{name}' does not exist.", "{{@" + name + "}}")
+                )
+            return []
+
+        if name not in used:
+            used.append(name)
+
+        sub = parse(body)
+        warnings.extend(sub.warnings)
+        for blank in sub.blanks:
+            # The outer template's declaration wins, matching the repeated-name rule.
+            blanks.setdefault(blank.name, blank)
+        return expand(sub, (*stack, name))
+
+    def expand(source: Template, stack: tuple[str, ...]) -> list[object]:
+        out: list[object] = []
+        for token in source.tokens:
+            if isinstance(token, Literal):
+                out.append(token)
+            elif isinstance(token, IncludeRef):
+                out.extend(expand_include(token.block, stack))
+            elif isinstance(token, BlankRef):
+                blank = blanks.get(token.name)
+                if blank is not None and blank.kind is BlankKind.BLOCK_CHOICE:
+                    branches = tuple(
+                        (
+                            option.label,
+                            tuple(expand_include(option.block, stack)) if option.block else (),
+                        )
+                        for option in blank.options
+                    )
+                    out.append(BlockChoiceRef(name=blank.name, branches=branches))
+                else:
+                    out.append(token)
+        return out
+
+    tokens = expand(template, ())
+    return ResolvedTemplate(
+        tokens=tuple(tokens),
+        blanks=tuple(blanks.values()),
+        warnings=tuple(warnings),
+        used_blocks=tuple(used),
+        missing_blocks=tuple(missing),
+    )
+
+
+@dataclass(frozen=True, slots=True)
 class Rendered:
     """The finished text, plus what the caller should know about it."""
 
     text: str
     missing: tuple[str, ...] = ()
     warnings: tuple[TemplateWarning, ...] = ()
+    missing_blocks: tuple[str, ...] = ()
 
     @property
     def is_complete(self) -> bool:
-        return not self.missing
+        return not self.missing and not self.missing_blocks
 
 
 @dataclass(slots=True)
@@ -64,7 +192,7 @@ class Prefill:
 
 
 def initial_values(
-    template: Template,
+    template: Template | ResolvedTemplate,
     *,
     clipboard_text: str | None = None,
     conversation: Mapping[str, str] | None = None,
@@ -94,25 +222,6 @@ def initial_values(
     return prefill
 
 
-def _value_for(blank: Blank, values: Mapping[str, str]) -> tuple[str, bool]:
-    """The text a blank contributes, and whether it should remove its line."""
-    raw = values.get(blank.name, "")
-    text = raw if raw is not None else ""
-
-    if blank.is_choice:
-        option = blank.option_for(text)
-        if option is not None and option.is_none:
-            return "", True
-        if option is not None and option.is_block:
-            # Blocks are resolved in M3; until then they contribute nothing.
-            return "", False
-        return text, False
-
-    if not text.strip() and blank.optional:
-        return "", True
-    return text, False
-
-
 def _collapse_blank_runs(lines: list[str]) -> list[str]:
     result: list[str] = []
     for line in lines:
@@ -123,46 +232,62 @@ def _collapse_blank_runs(lines: list[str]) -> list[str]:
 
 
 def render(
-    template: Template | str,
+    template: Template | ResolvedTemplate | str,
     values: Mapping[str, str] | None = None,
+    blocks: Mapping[str, str] | None = None,
 ) -> Rendered:
     """Assemble the output. Never raises; unknown values are simply empty."""
-    if isinstance(template, str):
-        template = parse(template)
+    resolved = template if isinstance(template, ResolvedTemplate) else resolve(template, blocks)
     values = values or {}
 
-    warnings = list(template.warnings)
     missing: list[str] = []
     killed_any = False
-    pieces: list[str] = []
 
-    for token in template.tokens:
-        if isinstance(token, Literal):
-            pieces.append(token.text)
-        elif isinstance(token, BlankRef):
-            blank = template.blank(token.name)
-            if blank is None:  # pragma: no cover - parser guarantees this
-                continue
-            text, kill_line = _value_for(blank, values)
-            if kill_line:
-                killed_any = True
-                pieces.append(LINE_KILL)
-            else:
+    def emit(tokens: tuple[object, ...]) -> list[str]:
+        nonlocal killed_any
+        pieces: list[str] = []
+        for token in tokens:
+            if isinstance(token, Literal):
+                pieces.append(token.text)
+            elif isinstance(token, BlockChoiceRef):
+                chosen = values.get(token.name, "")
+                branch = token.branch(chosen)
+                blank = resolved.blank(token.name)
+                option = blank.option_for(chosen) if blank else None
+                if option is not None and option.is_none:
+                    killed_any = True
+                    pieces.append(LINE_KILL)
+                elif branch:
+                    pieces.extend(emit(branch))
+                elif option is not None and not option.is_block:
+                    # A plain-text option mixed into a block list inserts its own text.
+                    pieces.append(option.label)
+                else:
+                    killed_any = True
+                    pieces.append(LINE_KILL)
+            elif isinstance(token, BlankRef):
+                blank = resolved.blank(token.name)
+                if blank is None:  # pragma: no cover - resolve guarantees this
+                    continue
+                text = values.get(blank.name, "") or ""
+                if not text.strip() and blank.optional:
+                    killed_any = True
+                    pieces.append(LINE_KILL)
+                    continue
                 pieces.append(text)
                 if not text.strip() and not blank.optional and blank.name not in missing:
                     missing.append(blank.name)
-        elif isinstance(token, IncludeRef):
-            warnings.append(
-                TemplateWarning(
-                    f"Include '@{token.block}' is not resolved yet (arrives in M3).",
-                    "{{@" + token.block + "}}",
-                )
-            )
+        return pieces
 
-    text = "".join(pieces)
+    text = "".join(emit(resolved.tokens))
 
     if killed_any:
         kept = [line for line in text.split("\n") if LINE_KILL not in line]
         text = "\n".join(_collapse_blank_runs(kept))
 
-    return Rendered(text=text, missing=tuple(missing), warnings=tuple(warnings))
+    return Rendered(
+        text=text,
+        missing=tuple(missing),
+        warnings=resolved.warnings,
+        missing_blocks=resolved.missing_blocks,
+    )

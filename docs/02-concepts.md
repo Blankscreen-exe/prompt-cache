@@ -101,11 +101,16 @@ choice-of-block list; elsewhere it is ordinary option text.
 
 ## Includes and blocks
 
-- `{{@name}}` inserts another prompt's body at fill time.
+- `{{@name}}` inserts another prompt's **whole body** at fill time — including its first
+  line, which is also its title. That is usually wanted (the title reads as a section label), but it is worth
+  knowing when authoring blocks. **Open: see Q22.**
 - **Blanks inside an included block become blanks of the template being filled.** A block can therefore carry its
   own placeholders.
-- Includes may nest. **Cycles must be detected** (A includes B includes A) and reported clearly by name. Depth is
-  capped at **10**.
+- Includes may nest. **Cycles are detected** (A includes B includes A) and reported by naming the whole chain
+  (`a -> b -> a`); the cycle contributes nothing and the rest of the output survives. Depth is capped at **10**.
+- A **diamond is not a cycle**: two different paths reaching the same block both resolve.
+- A block that does not exist (or has been deleted) is reported as a **missing include** and contributes nothing,
+  rather than failing the fill.
 - Editing a block changes every template that includes it, immediately. A fill stores the **fully assembled
   output**, so past conversations never change retroactively.
 - Choice-of-block blanks resolve the same way as static includes once an option is chosen, including nesting and

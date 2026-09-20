@@ -83,6 +83,7 @@ copy of every template per persona. The proposed fix is a **choice blank whose o
 
 | # | Question | Options / notes | Suggested default |
 |---|---|---|---|
+| Q22 | **Should an include drag in the block's title line?** Every prompt's first line is its title, so `{{@agency-info}}` currently inserts `Agency info` as well as the body. | (a) keep the whole body, as now and as specified; (b) skip the first line when including; (c) a modifier such as `{{@agency-info: body}}` to choose | (a) until it annoys |
 | Q19 | **The remaining blocks.** The user could not recall the full list beyond social profile, freelancer profile, agency info, my/agency projects, my/agency case studies. | Revisit once the first real templates are written — the gaps show up fast in practice | Defer |
 | Q21 | **What do the shipped example templates look like?** D24 + D28: the user's template structure, generic example block text. | Write them at M2 and have the user correct them, rather than asking for real wording up front | Draft, then review |
 
