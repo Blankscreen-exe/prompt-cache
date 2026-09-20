@@ -19,6 +19,7 @@ from textual.widgets.option_list import Option
 
 from prompt_cache import clipboard
 from prompt_cache.core.models import Prompt
+from prompt_cache.core.parser import parse
 from prompt_cache.store import prompts as prompt_store
 from prompt_cache.store import search as search_store
 
@@ -33,6 +34,10 @@ def _row(prompt: Prompt) -> Text:
     text.append(prompt.title, style="bold")
 
     details: list[str] = []
+    template = parse(prompt.body)
+    if template.blanks:
+        count = len(template.blanks)
+        details.append(f"template · {count} blank{'s' if count != 1 else ''}")
     if prompt.tags:
         details.append(" ".join(f"#{tag}" for tag in prompt.tags))
     if prompt.use_count:
@@ -161,6 +166,15 @@ class SearchScreen(Screen):
 
         prompt = self._selected_prompt()
         if prompt is None:
+            return
+        self._use(prompt)
+
+    def _use(self, prompt: Prompt) -> None:
+        """Enter: a template opens its fill form, a plain prompt copies straight out."""
+        if parse(prompt.body).is_template:
+            from prompt_cache.ui.screens.fill import FillScreen
+
+            self.app.push_screen(FillScreen(prompt.id), lambda _: self._after_edit())
             return
         self._copy(prompt)
 
