@@ -64,9 +64,14 @@ escape   := "\{{"      -- renders a literal "{{"
 - **Names are case-insensitive** identifiers: letters, digits, `_`, `-`. `{{Post}}` and `{{post}}` are one blank.
 - **The same name may appear many times** in a template. It is one input, repeated in the output.
 - **Spec parsing:** split the spec on commas; any part that is exactly `clipboard` or `optional` is taken as a
-  flag; the remaining parts are re-joined with commas and treated as the choice list. This means a choice option
-  may contain a comma (`{{tone: short, punchy | long}}` gives two options) but an option may not *be* the bare
-  word `clipboard` or `optional`.
+  flag; the remaining parts are re-joined **with their original spacing** and treated as the choice list. This
+  means a choice option may contain a comma (`{{tone: short, punchy | long}}` gives two options) but an option may
+  not *be* the bare word `clipboard` or `optional`.
+- **`=` is only special in the final option**, so `{{x: a=b | c}}` keeps `a=b` as an option rather than reading it
+  as a default. A default that matches no option warns and falls back to the first.
+- **A repeated name keeps its first declaration.** `{{post: clipboard}} … {{post}}` is one clipboard blank; a
+  second *differing* declaration warns and is ignored. The label shown uses the first spelling.
+- `clipboard` on a choice blank makes no sense and is ignored with a warning.
 - **Tolerance:** an unrecognised spec is a **warning shown in the editor, not a crash**. The blank degrades to a
   plain text blank so the template still works.
 - Whitespace around names, options and `=` is trimmed.
@@ -74,8 +79,9 @@ escape   := "\{{"      -- renders a literal "{{"
 
 ### `optional`
 
-If an optional blank is left empty, **the entire line it sits on is removed** from the output. Consecutive blank
-lines then collapse to at most one.
+If an optional blank is left empty, **the entire line it sits on is removed** from the output. Blank lines then
+collapse to at most one — **but only when something was actually removed.** If no line was dropped, the author's
+spacing is reproduced byte for byte, so a deliberate double blank line in a template survives.
 
 This is what makes a labelled section disappear cleanly:
 
@@ -122,7 +128,8 @@ One use of a prompt.
 4. On confirm: assemble, **copy to the clipboard**, and save the fill into a conversation (new or existing).
 
 A fill stores the prompt id, the **prompt version** used, all blank values, the assembled output and a timestamp.
-For choice-of-block blanks it stores the **chosen block name**, not the expanded text.
+For choice-of-block blanks it stores **the option as written** (`@agency-info`), never the expanded text — so a
+later edit to that block does not rewrite what a past fill recorded.
 
 ---
 

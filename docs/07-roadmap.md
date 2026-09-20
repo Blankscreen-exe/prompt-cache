@@ -51,7 +51,14 @@ three keystrokes; search stays responsive at 1,000 prompts; copy verified by han
 
 ---
 
-## M2 · The template grammar and the fill form
+## M2 · The template grammar and the fill form — **done (2026-09-20, Windows only)**
+
+> 243 tests passing, ruff clean. The parser covers every form in 02-concepts.md and never raises: 15 malformed
+> inputs are asserted to degrade rather than crash. The fill form pre-fills from the clipboard, previews live, and
+> copies with Ctrl+Enter; focus lands on the copy button when nothing needs typing, so the whole flow really is
+> open-then-copy. **Not yet run on Linux.**
+>
+> Editor syntax highlighting is still outstanding and now sits in M5.
 
 The heart of the project. `core/` stays pure, and this is where the test suite earns its keep.
 
@@ -100,7 +107,7 @@ reply comes from the clipboard, and nothing needed naming along the way.
 - Template pack export and import, with a collision preview.
 - Full JSON backup of everything.
 - The shipped example pack, and the first-run offer to import it (F11).
-- Editor syntax highlighting, if it slipped from M1.
+- Editor syntax highlighting for `{{blanks}}`, `{{@includes}}` and `#tags` (deferred from M1 and M2).
 - Settings screen and the key binding reference.
 
 **Done when:** templates can be moved between the PC and the laptop by exporting a pack and importing it, and no

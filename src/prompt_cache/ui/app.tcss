@@ -50,3 +50,46 @@ Screen {
 Footer {
     background: $panel;
 }
+
+/* ---- fill form ---- */
+
+#fill-main {
+    height: 1fr;
+    padding: 1 2 0 2;
+}
+
+#fill-title, #preview-label {
+    padding: 0 1;
+    color: $text-muted;
+}
+
+#fill-fields {
+    height: auto;
+    max-height: 50%;
+}
+
+.field-label {
+    padding: 1 1 0 1;
+}
+
+#fill-fields TextArea {
+    height: auto;
+    max-height: 8;
+    border: tall $primary;
+    background: $boost;
+}
+
+#fill-fields TextArea:focus {
+    border: tall $accent;
+}
+
+#fill-preview {
+    height: 1fr;
+    border: round $primary;
+    padding: 0 1;
+}
+
+#copy-button {
+    margin: 1 1 0 1;
+    width: auto;
+}
