@@ -16,7 +16,7 @@ terminal ──▶ prompt_cache (Textual app) ──▶ SQLite file
 | Package / env manager | **uv** (D10) | Matches kit. No Node toolchain anywhere. |
 | UI | **Textual** | The TUI framework |
 | Storage | **`sqlite3` + FTS5**, stdlib (D12) | No ORM, no migrations framework — plain SQL in a `migrations/` list |
-| Clipboard | **pyperclip** (verify Wayland support at M1) | Solved problem; do not hand-roll |
+| Clipboard | **pyperclip** | Solved problem; do not hand-roll. Wayland support confirmed at M1. |
 | ULIDs | **python-ulid** | Solved problem; do not hand-roll |
 | Fuzzy matching | **rapidfuzz** | Solved problem; do not hand-roll |
 | Tests | **pytest** | The parser gets the heavy coverage |
@@ -127,12 +127,13 @@ the established choice. Our own `clipboard.py` is a **thin wrapper** that does o
 - strip a leading BOM (U+FEFF) if one ever appears
 - guarantee a clipboard failure never takes down the UI — catch, warn in the footer, carry on
 
-**To verify at M1, not assume:**
+**Verified at M1 (2026-09-20):** pyperclip 1.11.0 ships `init_wl_clipboard`, so `wl-copy`/`wl-paste` are
+supported alongside `xclip`, `xsel`, Klipper and WSL. **No fallback of our own is needed.** A real OS round trip
+passes on Windows with multi-line and non-ASCII text, and `tests/test_clipboard.py` repeats it on any machine that
+has a backend (skipping where none exists).
 
-- **Wayland.** pyperclip's Linux support is built around `xclip`/`xsel`; `wl-clipboard` support needs checking on
-  a real Wayland session. If it is missing, add a small `wl-copy`/`wl-paste` fallback *inside our wrapper* — or
-  switch to a library that covers it (`pyclip` is the alternative). Do not rewrite the whole thing by hand.
-- **Windows.** Confirm no BOM appears and that large multi-paragraph text round-trips intact.
+Still to confirm on Linux: that a backend is actually installed on the owner's machine, and which session type it
+runs.
 
 If no backend is available, show a one-line message naming the package to install
 (`wl-clipboard`, `xclip` or `xsel`) and fall back to manual paste. A missing clipboard tool must degrade the app,

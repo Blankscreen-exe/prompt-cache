@@ -28,7 +28,14 @@ file is created in the right place on each, and the app opens and exits without 
 
 ---
 
-## M1 · Prompts: write, find, copy
+## M1 · Prompts: write, find, copy — **done (2026-09-20, Windows only)**
+
+> 129 tests passing, ruff clean. Verified headlessly through Textual's pilot: typing plus Enter creates a prompt,
+> a few characters plus Enter copies one, pin/delete/restore all work, and a broken clipboard warns instead of
+> crashing. Search at 1,000 prompts is well inside budget. Libraries used rather than hand-rolled: `pyperclip`,
+> `python-ulid`, `rapidfuzz`, `python-slugify`. **Not yet run on Linux.**
+>
+> Editor syntax highlighting deferred to M2 as the milestone allows.
 
 - Create, edit with autosave, soft delete and restore. Title from the first line; `#tags` parsed; slug generated.
 - The search palette: FTS5 plus fuzzy matching, grouped results, keyboard navigation, "Create prompt: *…*" when
