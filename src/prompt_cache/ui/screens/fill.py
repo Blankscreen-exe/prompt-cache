@@ -19,7 +19,7 @@ from textual.widgets import Button, Footer, Select, Static, TextArea
 
 from prompt_cache import clipboard
 from prompt_cache.core.parser import Blank, parse
-from prompt_cache.core.render import ValueSource, initial_values, render
+from prompt_cache.core.render import ValueSource, initial_values, render, resolve
 from prompt_cache.store import prompts as prompt_store
 
 FIELD_PREFIX = "field-"
@@ -45,13 +45,15 @@ class FillScreen(Screen[None]):
         super().__init__()
         self.prompt_id = prompt_id
         # Both are filled in compose(), once the app (and its connection) is reachable.
-        self.template = parse("")
+        self.template = resolve(parse(""))
         self.sources: dict[str, ValueSource] = {}
 
     def compose(self) -> ComposeResult:
         prompt = prompt_store.get(self.app.connection, self.prompt_id)
         body = prompt.body if prompt else ""
-        self.template = parse(body)
+        # Blocks are every other live prompt, so a block's own blanks join this form.
+        blocks = prompt_store.bodies_by_name(self.app.connection)
+        self.template = resolve(parse(body), blocks)
 
         prefill = initial_values(self.template, clipboard_text=clipboard.read_text_or_empty())
         self.sources = prefill.sources
@@ -60,6 +62,13 @@ class FillScreen(Screen[None]):
         title.append(prompt.title if prompt else "Untitled", style="bold")
         blank_count = len(self.template.blanks)
         title.append(f"   {blank_count} blank{'s' if blank_count != 1 else ''}", style="dim")
+        if self.template.used_blocks:
+            title.append("   " + " ".join(f"@{b}" for b in self.template.used_blocks), style="cyan")
+        if self.template.missing_blocks:
+            title.append(
+                "   missing: " + " ".join(f"@{b}" for b in self.template.missing_blocks),
+                style="bold yellow",
+            )
 
         with Vertical(id="fill-main"):
             yield Static(title, id="fill-title")

@@ -243,3 +243,35 @@ def list_trash(conn: sqlite3.Connection) -> list[Prompt]:
 
 def count_live(conn: sqlite3.Connection) -> int:
     return conn.execute("SELECT count(*) FROM prompts WHERE deleted_at IS NULL").fetchone()[0]
+
+
+def bodies_by_name(conn: sqlite3.Connection) -> dict[str, str]:
+    """Every live prompt's body, keyed by slug — the block table for include resolution.
+
+    Loading all of them is deliberate: prompts are small, the whole point is that any
+    prompt can be a block, and resolution needs to follow nesting without a query per
+    hop.
+    """
+    rows = conn.execute("SELECT name, body FROM prompts WHERE deleted_at IS NULL")
+    return {row["name"]: row["body"] for row in rows}
+
+
+def used_by(conn: sqlite3.Connection, name: str, *, exclude_id: str | None = None) -> list[Prompt]:
+    r"""Live prompts whose body includes `{{@name}}`, directly or as a choice option.
+
+    Parsed rather than pattern-matched, so an escaped `\{{@name}}` in an example does
+    not count as a real reference.
+    """
+    from prompt_cache.core.parser import parse
+
+    hits: list[Prompt] = []
+    for prompt in list_live(conn):
+        if prompt.id == exclude_id:
+            continue
+        template = parse(prompt.body)
+        referenced = set(template.includes)
+        for blank in template.blanks:
+            referenced.update(option.block for option in blank.options if option.block)
+        if name in referenced:
+            hits.append(prompt)
+    return hits

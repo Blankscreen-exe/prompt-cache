@@ -93,3 +93,29 @@ Footer {
     margin: 1 1 0 1;
     width: auto;
 }
+
+/* ---- block picker ---- */
+
+BlockPicker {
+    align: center middle;
+}
+
+#picker {
+    width: 70%;
+    max-width: 80;
+    height: auto;
+    max-height: 60%;
+    border: thick $accent;
+    background: $surface;
+    padding: 1 2;
+}
+
+#picker-title {
+    padding: 0 0 1 0;
+}
+
+#picker-list {
+    height: auto;
+    max-height: 14;
+    border: none;
+}

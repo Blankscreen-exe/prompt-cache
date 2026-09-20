@@ -88,8 +88,8 @@ class TestChoices:
         body = "A\nPROOF: {{p: @x | none}}\nB"
         assert render(body, {"p": "none"}).text == "A\nB"
 
-    def test_a_block_option_contributes_nothing_until_m3(self):
-        assert render("{{p: @x | @y}}", {"p": "@x"}).text == ""
+    def test_a_block_option_inserts_that_block(self):
+        assert render("{{p: @x | @y}}", {"p": "@x"}, {"x": "X body"}).text == "X body"
 
     def test_a_value_outside_the_options_is_still_inserted(self):
         """The form constrains choices; the renderer does not second-guess a value."""
@@ -97,9 +97,10 @@ class TestChoices:
 
 
 class TestIncludes:
-    def test_include_is_not_resolved_yet_but_warns(self):
+    def test_a_missing_include_warns_and_contributes_nothing(self):
         result = render("before {{@block}} after", {})
-        assert "block" in result.warnings[-1].message
+        assert result.missing_blocks == ("block",)
+        assert "does not exist" in result.warnings[-1].message
         assert result.text == "before  after"
 
 
