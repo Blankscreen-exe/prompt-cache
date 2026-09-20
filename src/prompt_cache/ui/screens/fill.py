@@ -20,6 +20,7 @@ from textual.widgets import Button, Footer, Select, Static, TextArea
 from prompt_cache import clipboard
 from prompt_cache.core.parser import Blank, parse
 from prompt_cache.core.render import ValueSource, initial_values, render, resolve
+from prompt_cache.store import conversations as conversation_store
 from prompt_cache.store import prompts as prompt_store
 
 FIELD_PREFIX = "field-"
@@ -41,9 +42,11 @@ class FillScreen(Screen[None]):
         Binding("ctrl+e", "edit_template", "edit template", priority=True),
     ]
 
-    def __init__(self, prompt_id: str) -> None:
+    def __init__(self, prompt_id: str, conversation_id: str | None = None) -> None:
         super().__init__()
         self.prompt_id = prompt_id
+        # Set when continuing an existing thread; otherwise the first fill starts one.
+        self.conversation_id = conversation_id
         # Both are filled in compose(), once the app (and its connection) is reachable.
         self.template = resolve(parse(""))
         self.sources: dict[str, ValueSource] = {}
@@ -55,11 +58,24 @@ class FillScreen(Screen[None]):
         blocks = prompt_store.bodies_by_name(self.app.connection)
         self.template = resolve(parse(body), blocks)
 
-        prefill = initial_values(self.template, clipboard_text=clipboard.read_text_or_empty())
+        thread = (
+            conversation_store.get(self.app.connection, self.conversation_id)
+            if self.conversation_id
+            else None
+        )
+        prefill = initial_values(
+            self.template,
+            clipboard_text=clipboard.read_text_or_empty(),
+            conversation=thread.values if thread else None,
+        )
         self.sources = prefill.sources
 
         title = Text(no_wrap=True, overflow="ellipsis")
         title.append(prompt.title if prompt else "Untitled", style="bold")
+        title.append(
+            f"   {'continuing: ' + thread.label if thread else 'new thread'}",
+            style="dim italic",
+        )
         blank_count = len(self.template.blanks)
         title.append(f"   {blank_count} blank{'s' if blank_count != 1 else ''}", style="dim")
         if self.template.used_blocks:
@@ -175,6 +191,15 @@ class FillScreen(Screen[None]):
             return
 
         prompt_store.mark_used(self.app.connection, self.prompt_id)
+        fill = conversation_store.add_fill(
+            self.app.connection,
+            prompt_id=self.prompt_id,
+            values=self.current_values(),
+            output=result.text,
+            conversation_id=self.conversation_id,
+        )
+        self.conversation_id = fill.conversation_id
+
         if result.missing:
             self.notify(
                 f"Copied, but {', '.join(result.missing)} was left empty",
@@ -182,7 +207,7 @@ class FillScreen(Screen[None]):
                 timeout=4,
             )
         else:
-            self.notify("Copied", timeout=2)
+            self.notify("Copied · saved to thread", timeout=2)
         self.dismiss(None)
 
     def action_edit_template(self) -> None:

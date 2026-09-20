@@ -140,18 +140,20 @@ class EditorScreen(Screen[None]):
 
     def action_insert_block(self) -> None:
         """Ctrl+B: pick a block and drop {{@its-name}} in at the cursor."""
-        from prompt_cache.ui.screens.blocks import BlockPicker
+        from prompt_cache.ui.screens.picker import PromptPicker
 
-        def insert(name: str | None) -> None:
-            if not name:
+        def insert(chosen) -> None:
+            if chosen is None:
                 return
             area = self.query_one("#editor-body", TextArea)
-            area.insert("{{@" + name + "}}")
+            area.insert("{{@" + chosen.name + "}}")
             area.focus()
             self._dirty = True
             self._save()
 
-        self.app.push_screen(BlockPicker(exclude_id=self.prompt_id), insert)
+        self.app.push_screen(
+            PromptPicker(title="Include a block", exclude_id=self.prompt_id), insert
+        )
 
     def action_copy_raw(self) -> None:
         self._save()

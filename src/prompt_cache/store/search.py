@@ -20,7 +20,8 @@ from datetime import UTC, datetime
 
 from rapidfuzz import fuzz, process
 
-from prompt_cache.core.models import Prompt, SearchHit, SearchResults
+from prompt_cache.core.models import Conversation, Prompt, SearchHit, SearchResults
+from prompt_cache.store import conversations as conversation_store
 from prompt_cache.store import prompts as prompt_store
 
 # Scoring weights. Match quality dominates; frecency breaks ties and surfaces habits.
@@ -85,6 +86,32 @@ def _fts_matches(conn: sqlite3.Connection, query: str) -> dict[str, float]:
     return scores
 
 
+def _conversation_matches(conn: sqlite3.Connection, query: str) -> dict[str, float]:
+    """Conversation id -> score, over the label and the flattened values."""
+    fts = _fts_query(query)
+    if not fts:
+        return {}
+    try:
+        rows = conn.execute(
+            "SELECT conversation_id, bm25(conversations_fts, 10.0, 1.0) AS rank"
+            " FROM conversations_fts WHERE conversations_fts MATCH ? ORDER BY rank",
+            (fts,),
+        ).fetchall()
+    except sqlite3.OperationalError:
+        return {}
+    return {row["conversation_id"]: min(100.0, -float(row["rank"]) * 10.0) for row in rows}
+
+
+def _conversation_fuzzy(candidates: list[Conversation], query: str) -> dict[str, float]:
+    if not candidates:
+        return {}
+    haystack = {c.id: c.label for c in candidates}
+    matches = process.extract(
+        query, haystack, scorer=fuzz.WRatio, limit=None, score_cutoff=MIN_FUZZY_SCORE
+    )
+    return {cid: float(score) for _, score, cid in matches}
+
+
 def _fuzzy_matches(candidates: list[Prompt], query: str) -> dict[str, float]:
     """Prompt id → best fuzzy score across title and slug."""
     if not candidates:
@@ -100,7 +127,9 @@ def _fuzzy_matches(candidates: list[Prompt], query: str) -> dict[str, float]:
     return {prompt_id: float(score) for _, score, prompt_id in matches}
 
 
-def _browse(prompts: list[Prompt], now: datetime) -> SearchResults:
+def _browse(
+    prompts: list[Prompt], conversations: list[Conversation], now: datetime
+) -> SearchResults:
     """What an empty query shows: pinned, then recent, then most used."""
     pinned = sorted(
         (p for p in prompts if p.pinned),
@@ -134,6 +163,16 @@ def _browse(prompts: list[Prompt], now: datetime) -> SearchResults:
         groups.append(("Recent", to_hits(recent)))
     if most_used:
         groups.append(("Most used", to_hits(most_used)))
+    if conversations:
+        groups.append(
+            (
+                "Threads",
+                [
+                    SearchHit(conversation=c, score=0.0, matched_on="browse")
+                    for c in conversations[:10]
+                ],
+            )
+        )
     return SearchResults(groups=groups)
 
 
@@ -151,10 +190,11 @@ def search(
     """
     now = now or datetime.now(UTC)
     live = prompt_store.list_live(conn)
+    threads = conversation_store.list_live(conn)
     query = query.strip()
 
     if not query:
-        return _browse(live, now)
+        return _browse(live, threads, now)
 
     by_id = {prompt.id: prompt for prompt in live}
     fts_scores = _fts_matches(conn, query)
@@ -181,10 +221,29 @@ def search(
             )
         )
 
-    hits.sort(key=lambda hit: (-hit.score, hit.prompt.title.lower()))
+    hits.sort(key=lambda hit: (-hit.score, hit.title.lower()))
     hits = hits[:limit]
 
-    results = SearchResults(groups=[("Prompts", hits)] if hits else [])
-    if not hits:
+    by_thread = {c.id: c for c in threads}
+    thread_scores = _conversation_matches(conn, query)
+    thread_fuzzy = _conversation_fuzzy(threads, query)
+    thread_hits: list[SearchHit] = []
+    for cid in set(thread_scores) | set(thread_fuzzy):
+        conversation = by_thread.get(cid)
+        if conversation is None:
+            continue
+        score = max(thread_scores.get(cid, 0.0), thread_fuzzy.get(cid, 0.0))
+        thread_hits.append(SearchHit(conversation=conversation, score=score, match_score=score))
+    thread_hits.sort(key=lambda hit: (-hit.score, hit.title.lower()))
+    thread_hits = thread_hits[:limit]
+
+    groups: list[tuple[str, list[SearchHit]]] = []
+    if hits:
+        groups.append(("Prompts", hits))
+    if thread_hits:
+        groups.append(("Threads", thread_hits))
+
+    results = SearchResults(groups=groups)
+    if not hits and not thread_hits:
         results.create_label = query
     return results

@@ -119,3 +119,41 @@ BlockPicker {
     max-height: 14;
     border: none;
 }
+
+/* ---- conversation ---- */
+
+#thread-main {
+    height: 1fr;
+    padding: 1 2 0 2;
+}
+
+#thread-title {
+    padding: 0 1 1 1;
+}
+
+.section-label {
+    padding: 0 1;
+    color: $text-muted;
+}
+
+#thread-values {
+    height: auto;
+    max-height: 10;
+    border: none;
+}
+
+#thread-value-name {
+    margin: 0 0 1 0;
+    border: tall $primary;
+    background: $boost;
+}
+
+#thread-value-name:focus {
+    border: tall $accent;
+}
+
+#thread-history {
+    height: 1fr;
+    border: round $primary;
+    padding: 0 1;
+}

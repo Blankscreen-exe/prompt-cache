@@ -18,13 +18,27 @@ from textual.widgets import Footer, Input, OptionList
 from textual.widgets.option_list import Option
 
 from prompt_cache import clipboard
-from prompt_cache.core.models import Prompt
+from prompt_cache.core.models import Prompt, SearchHit
 from prompt_cache.core.parser import parse
 from prompt_cache.store import prompts as prompt_store
 from prompt_cache.store import search as search_store
 
 CREATE_ID = "__create__"
 HEADER_PREFIX = "__header__"
+THREAD_PREFIX = "__thread__"
+
+
+def _thread_row(hit: SearchHit) -> Text:
+    """One thread line: what it is about, and how much it already knows."""
+    thread = hit.conversation
+    text = Text(no_wrap=True, overflow="ellipsis")
+    text.append("  ")
+    text.append(thread.label, style="bold")
+    details = [f"{thread.fill_count} fill{'s' if thread.fill_count != 1 else ''}"]
+    if thread.values:
+        details.append(thread.summary)
+    text.append("   " + " · ".join(details), style="dim")
+    return text
 
 
 def _row(prompt: Prompt) -> Text:
@@ -104,7 +118,11 @@ class SearchScreen(Screen):
                         disabled=True,
                     )
                 )
-            options.extend(Option(_row(hit.prompt), id=hit.prompt.id) for hit in hits)
+            for hit in hits:
+                if hit.is_conversation:
+                    options.append(Option(_thread_row(hit), id=f"{THREAD_PREFIX}{hit.id}"))
+                else:
+                    options.append(Option(_row(hit.prompt), id=hit.prompt.id))
 
         if results.create_label:
             label = Text(no_wrap=True, overflow="ellipsis")
@@ -130,7 +148,7 @@ class SearchScreen(Screen):
         if index is None:
             return None
         option = self._results.get_option_at_index(index)
-        if option.id in (None, CREATE_ID) or option.id.startswith(HEADER_PREFIX):
+        if option.id in (None, CREATE_ID) or option.id.startswith((HEADER_PREFIX, THREAD_PREFIX)):
             return None
         return prompt_store.get(self.app.connection, option.id)
 
@@ -163,11 +181,19 @@ class SearchScreen(Screen):
         if option.id == CREATE_ID:
             self.action_new_prompt(self._query)
             return
+        if option.id and option.id.startswith(THREAD_PREFIX):
+            self._open_thread(option.id[len(THREAD_PREFIX) :])
+            return
 
         prompt = self._selected_prompt()
         if prompt is None:
             return
         self._use(prompt)
+
+    def _open_thread(self, conversation_id: str) -> None:
+        from prompt_cache.ui.screens.conversation import ConversationScreen
+
+        self.app.push_screen(ConversationScreen(conversation_id), lambda _: self._after_edit())
 
     def _use(self, prompt: Prompt) -> None:
         """Enter: a template opens its fill form, a plain prompt copies straight out."""
