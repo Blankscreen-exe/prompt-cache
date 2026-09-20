@@ -5,7 +5,7 @@ Screen {
     background: $surface;
 }
 
-#main {
+#main, #editor-main {
     height: 1fr;
     padding: 1 2 0 2;
 }
@@ -19,10 +19,32 @@ Screen {
     border: tall $accent;
 }
 
-#results {
+#results, #trash-list {
     height: 1fr;
-    padding: 1 1;
+    border: none;
+    background: $surface;
+    padding: 1 0 0 0;
+}
+
+#results > .option-list--option-highlighted,
+#trash-list > .option-list--option-highlighted {
+    background: $accent 25%;
+    color: $text;
+}
+
+#editor-meta, #trash-title {
+    padding: 0 1 1 1;
     color: $text-muted;
+}
+
+#editor-body {
+    height: 1fr;
+    border: tall $primary;
+    background: $boost;
+}
+
+#editor-body:focus {
+    border: tall $accent;
 }
 
 Footer {
