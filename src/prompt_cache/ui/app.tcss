@@ -1,0 +1,30 @@
+/* All styling lives here, not inline, so the theme is one file to change.
+   Dense, calm, one accent colour used only for focus and selection. */
+
+Screen {
+    background: $surface;
+}
+
+#main {
+    height: 1fr;
+    padding: 1 2 0 2;
+}
+
+#search {
+    border: tall $primary;
+    background: $boost;
+}
+
+#search:focus {
+    border: tall $accent;
+}
+
+#results {
+    height: 1fr;
+    padding: 1 1;
+    color: $text-muted;
+}
+
+Footer {
+    background: $panel;
+}

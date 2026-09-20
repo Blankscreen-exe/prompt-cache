@@ -1,0 +1,9 @@
+# This repo is used on Windows and Linux. Normalise to LF in the repository and in the
+# working tree, so Python, SQL and shell files behave identically on both.
+* text=auto eol=lf
+
+# Keep the lockfile byte-stable.
+uv.lock text eol=lf
+
+*.png binary
+*.svg text eol=lf

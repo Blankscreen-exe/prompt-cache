@@ -1,0 +1,17 @@
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.ruff_cache/
+dist/
+build/
+*.egg-info/
+
+# never commit a database or an exported pack
+*.db
+*.db-wal
+*.db-shm
+/packs/
+
+# Local-only notes: machine specifics, owner context. Never published.
+docs/local/
