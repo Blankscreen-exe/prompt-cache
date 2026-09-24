@@ -64,9 +64,14 @@ escape   := "\{{"      -- renders a literal "{{"
 - **Names are case-insensitive** identifiers: letters, digits, `_`, `-`. `{{Post}}` and `{{post}}` are one blank.
 - **The same name may appear many times** in a template. It is one input, repeated in the output.
 - **Spec parsing:** split the spec on commas; any part that is exactly `clipboard` or `optional` is taken as a
-  flag; the remaining parts are re-joined with commas and treated as the choice list. This means a choice option
-  may contain a comma (`{{tone: short, punchy | long}}` gives two options) but an option may not *be* the bare
-  word `clipboard` or `optional`.
+  flag; the remaining parts are re-joined **with their original spacing** and treated as the choice list. This
+  means a choice option may contain a comma (`{{tone: short, punchy | long}}` gives two options) but an option may
+  not *be* the bare word `clipboard` or `optional`.
+- **`=` is only special in the final option**, so `{{x: a=b | c}}` keeps `a=b` as an option rather than reading it
+  as a default. A default that matches no option warns and falls back to the first.
+- **A repeated name keeps its first declaration.** `{{post: clipboard}} … {{post}}` is one clipboard blank; a
+  second *differing* declaration warns and is ignored. The label shown uses the first spelling.
+- `clipboard` on a choice blank makes no sense and is ignored with a warning.
 - **Tolerance:** an unrecognised spec is a **warning shown in the editor, not a crash**. The blank degrades to a
   plain text blank so the template still works.
 - Whitespace around names, options and `=` is trimmed.
@@ -74,8 +79,9 @@ escape   := "\{{"      -- renders a literal "{{"
 
 ### `optional`
 
-If an optional blank is left empty, **the entire line it sits on is removed** from the output. Consecutive blank
-lines then collapse to at most one.
+If an optional blank is left empty, **the entire line it sits on is removed** from the output. Blank lines then
+collapse to at most one — **but only when something was actually removed.** If no line was dropped, the author's
+spacing is reproduced byte for byte, so a deliberate double blank line in a template survives.
 
 This is what makes a labelled section disappear cleanly:
 
@@ -95,11 +101,16 @@ choice-of-block list; elsewhere it is ordinary option text.
 
 ## Includes and blocks
 
-- `{{@name}}` inserts another prompt's body at fill time.
+- `{{@name}}` inserts another prompt's **whole body** at fill time — including its first
+  line, which is also its title. That is usually wanted (the title reads as a section label), but it is worth
+  knowing when authoring blocks. **Open: see Q22.**
 - **Blanks inside an included block become blanks of the template being filled.** A block can therefore carry its
   own placeholders.
-- Includes may nest. **Cycles must be detected** (A includes B includes A) and reported clearly by name. Depth is
-  capped at **10**.
+- Includes may nest. **Cycles are detected** (A includes B includes A) and reported by naming the whole chain
+  (`a -> b -> a`); the cycle contributes nothing and the rest of the output survives. Depth is capped at **10**.
+- A **diamond is not a cycle**: two different paths reaching the same block both resolve.
+- A block that does not exist (or has been deleted) is reported as a **missing include** and contributes nothing,
+  rather than failing the fill.
 - Editing a block changes every template that includes it, immediately. A fill stores the **fully assembled
   output**, so past conversations never change retroactively.
 - Choice-of-block blanks resolve the same way as static includes once an option is chosen, including nesting and
@@ -122,7 +133,8 @@ One use of a prompt.
 4. On confirm: assemble, **copy to the clipboard**, and save the fill into a conversation (new or existing).
 
 A fill stores the prompt id, the **prompt version** used, all blank values, the assembled output and a timestamp.
-For choice-of-block blanks it stores the **chosen block name**, not the expanded text.
+For choice-of-block blanks it stores **the option as written** (`@agency-info`), never the expanded text — so a
+later edit to that block does not rewrite what a past fill recorded.
 
 ---
 
@@ -131,9 +143,13 @@ For choice-of-block blanks it stores the **chosen block name**, not the expanded
 A thread of related fills — one post and its replies (D27).
 
 - **Created automatically** by the first fill of a template. No naming required. The label is derived from the
-  longest text value in the fill, truncated to roughly eight words. Editable.
+  **longest** value in the fill, truncated to roughly eight words, and follows the content as the thread grows —
+  until the user sets one by hand, after which it stays put. Ties break on the blank name so the label is
+  deterministic.
 - Holds a **merged map of values** by blank name, built from its fills plus anything added directly. Later fills
   overwrite earlier values of the same name; the fill history keeps the old ones.
+- **An empty value never erases what the thread knows.** A follow-up template with a blank field leaves the
+  existing value alone, rather than wiping the thread's memory of it.
 - **Continue with…** — pick another template; its blanks pre-fill from the conversation by name. This is what
   makes reply-to-a-reply nearly free, and it is why **consistent blank naming across your templates matters**.
 - The user can **set a value from the clipboard** at any time (for example, saving the comment they actually

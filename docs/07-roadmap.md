@@ -28,7 +28,14 @@ file is created in the right place on each, and the app opens and exits without 
 
 ---
 
-## M1 · Prompts: write, find, copy
+## M1 · Prompts: write, find, copy — **done (2026-09-20, Windows only)**
+
+> 129 tests passing, ruff clean. Verified headlessly through Textual's pilot: typing plus Enter creates a prompt,
+> a few characters plus Enter copies one, pin/delete/restore all work, and a broken clipboard warns instead of
+> crashing. Search at 1,000 prompts is well inside budget. Libraries used rather than hand-rolled: `pyperclip`,
+> `python-ulid`, `rapidfuzz`, `python-slugify`. **Not yet run on Linux.**
+>
+> Editor syntax highlighting deferred to M2 as the milestone allows.
 
 - Create, edit with autosave, soft delete and restore. Title from the first line; `#tags` parsed; slug generated.
 - The search palette: FTS5 plus fuzzy matching, grouped results, keyboard navigation, "Create prompt: *…*" when
@@ -44,7 +51,14 @@ three keystrokes; search stays responsive at 1,000 prompts; copy verified by han
 
 ---
 
-## M2 · The template grammar and the fill form
+## M2 · The template grammar and the fill form — **done (2026-09-20, Windows only)**
+
+> 243 tests passing, ruff clean. The parser covers every form in 02-concepts.md and never raises: 15 malformed
+> inputs are asserted to degrade rather than crash. The fill form pre-fills from the clipboard, previews live, and
+> copies with Ctrl+Enter; focus lands on the copy button when nothing needs typing, so the whole flow really is
+> open-then-copy. **Not yet run on Linux.**
+>
+> Editor syntax highlighting is still outstanding and now sits in M5.
 
 The heart of the project. `core/` stays pure, and this is where the test suite earns its keep.
 
@@ -62,19 +76,36 @@ the flow from "post copied" to "assembled prompt on clipboard" is a handful of k
 
 ---
 
-## M3 · Blocks, includes and choice-of-block
+## M3 · Blocks, includes and choice-of-block — **done (2026-09-21, Windows only)**
+
+> 285 tests passing, ruff clean. Includes resolve recursively; cycles name the whole chain (`a -> b -> a`) and
+> never recurse away; depth caps at 10; blanks inside a block become blanks of the filling template;
+> choice-of-block inserts the chosen block, so one template really does serve both personas. The editor flags
+> missing includes and reports "used by N templates". **Not yet run on Linux.**
+>
+> Substitution: the roadmap asked for autocomplete on `{{@`. Shipped a **searchable block picker** (Ctrl+B)
+> instead — no popup chasing the cursor, and it doubles as a way to see which blocks exist. It refuses to offer
+> the prompt being edited, which would be a one-keypress way to build a cycle.
 
 - `{{@name}}` resolution, nesting, **cycle detection reported by name**, depth cap of 10.
 - `{{persona: @a | @b | none}}` — choice-of-block, resolving the same way once chosen.
 - Blanks inside included blocks surface as blanks of the filling template.
-- Editor: autocomplete for include names, warnings for missing includes, **"used by N templates"**.
+- Editor: a searchable block picker (Ctrl+B), warnings for missing includes, **"used by N templates"**.
 
 **Done when:** editing one block changes the output of every template that includes it; a cycle produces a clear
 message naming the prompts involved rather than a stack overflow; and one template serves both personas.
 
 ---
 
-## M4 · Conversations and follow-ups
+## M4 · Conversations and follow-ups — **done (2026-09-21, Windows only)**
+
+> 327 tests passing, ruff clean. Every fill saves into an auto-named thread; values merge by blank name; a thread
+> is searchable by its content and appears when browsing; "Continue with…" pre-fills the next template from what
+> the thread already knows. `Ctrl+S` saves the clipboard into a named value — how the comment you actually posted
+> gets back in.
+>
+> The flow F5 describes is covered end to end by `test_the_follow_up_fills_itself`: comment, save what you posted,
+> copy their reply, continue — and **two of the three fields fill themselves**. **Not yet run on Linux.**
 
 - Every fill saves into a conversation — created automatically, labelled from the longest value, editable.
 - Values merge by blank name; later fills overwrite, history retains.
@@ -87,13 +118,25 @@ reply comes from the clipboard, and nothing needed naming along the way.
 
 ---
 
-## M5 · Safety, packs and polish
+## M5 · Safety, packs and polish — **done (2026-09-21, Windows only)**
+
+> 370 tests passing, ruff clean. Debounced version history with a diff view and restore that never destroys what
+> it replaced; template packs as plain Markdown plus a manifest, with a collision preview; a full JSON backup that
+> round-trips and rebuilds the search index; an example pack offered once on an empty database.
+>
+> Editor syntax highlighting resolved as far as it can be: `register_language` needs a compiled tree-sitter
+> grammar, so `{{blanks}}` cannot be coloured cheaply. The editor uses bundled markdown highlighting and reports
+> structure in its meta line instead. Recorded in 04-ui.md.
+>
+> **A regression worth remembering:** an editor attribute named `_closing` shadowed `MessagePump._closing` and
+> hung the whole app with no traceback. Renamed, and `TestFrameworkAttributeCollisions` now guards every screen.
+> **Not yet run on Linux.**
 
 - Versions with debounce, a diff view, restore.
 - Template pack export and import, with a collision preview.
 - Full JSON backup of everything.
 - The shipped example pack, and the first-run offer to import it (F11).
-- Editor syntax highlighting, if it slipped from M1.
+- Editor syntax highlighting for `{{blanks}}`, `{{@includes}}` and `#tags` (deferred from M1 and M2).
 - Settings screen and the key binding reference.
 
 **Done when:** templates can be moved between the PC and the laptop by exporting a pack and importing it, and no

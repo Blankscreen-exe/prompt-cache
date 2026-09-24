@@ -16,7 +16,7 @@ terminal ──▶ prompt_cache (Textual app) ──▶ SQLite file
 | Package / env manager | **uv** (D10) | Matches kit. No Node toolchain anywhere. |
 | UI | **Textual** | The TUI framework |
 | Storage | **`sqlite3` + FTS5**, stdlib (D12) | No ORM, no migrations framework — plain SQL in a `migrations/` list |
-| Clipboard | **pyperclip** (verify Wayland support at M1) | Solved problem; do not hand-roll |
+| Clipboard | **pyperclip** | Solved problem; do not hand-roll. Wayland support confirmed at M1. |
 | ULIDs | **python-ulid** | Solved problem; do not hand-roll |
 | Fuzzy matching | **rapidfuzz** | Solved problem; do not hand-roll |
 | Tests | **pytest** | The parser gets the heavy coverage |
@@ -127,12 +127,13 @@ the established choice. Our own `clipboard.py` is a **thin wrapper** that does o
 - strip a leading BOM (U+FEFF) if one ever appears
 - guarantee a clipboard failure never takes down the UI — catch, warn in the footer, carry on
 
-**To verify at M1, not assume:**
+**Verified at M1 (2026-09-20):** pyperclip 1.11.0 ships `init_wl_clipboard`, so `wl-copy`/`wl-paste` are
+supported alongside `xclip`, `xsel`, Klipper and WSL. **No fallback of our own is needed.** A real OS round trip
+passes on Windows with multi-line and non-ASCII text, and `tests/test_clipboard.py` repeats it on any machine that
+has a backend (skipping where none exists).
 
-- **Wayland.** pyperclip's Linux support is built around `xclip`/`xsel`; `wl-clipboard` support needs checking on
-  a real Wayland session. If it is missing, add a small `wl-copy`/`wl-paste` fallback *inside our wrapper* — or
-  switch to a library that covers it (`pyclip` is the alternative). Do not rewrite the whole thing by hand.
-- **Windows.** Confirm no BOM appears and that large multi-paragraph text round-trips intact.
+Still to confirm on Linux: that a backend is actually installed on the owner's machine, and which session type it
+runs.
 
 If no backend is available, show a one-line message naming the package to install
 (`wl-clipboard`, `xclip` or `xsel`) and fall back to manual paste. A missing clipboard tool must degrade the app,
@@ -148,9 +149,24 @@ on demand on each, and results reported honestly per platform.
 prompt-cache is **standalone** (D8). It must run with `prompt-cache` on a machine with no kit installed, and it
 must never import kit.
 
-kit registers it the way it registers any other tool, so `kit prompt-cache` becomes an alias for the console
-script. That registration is a change in the **kit** repo, not here. The only thing this repo owes kit is a stable
-console-script name and a clean exit code.
+kit discovers tools by folder — every directory under its `tools/` **is** a tool, so there is no registry to
+edit. The registration lives entirely in the **kit** repo as `tools/prompt-cache/`:
+
+| File | What it does |
+|---|---|
+| `main.py` | Finds the `prompt-cache` console script on PATH and runs it, passing arguments and the exit code straight through |
+| `tool.json` | `category: productivity`, aliases `pc` and `prompts`, `interactive: true` (a full-screen app, so kit hub does not try to embed it), and a `data` setting mapped to `PROMPT_CACHE_DATA` |
+| `README.md` | Usage, settings, and how to install prompt-cache |
+
+**kit never imports prompt-cache.** It launches the installed console script in a separate process, so the two keep
+their own dependencies and either works without the other (D8). If the script is not on PATH, kit falls back to
+`uv run --project $PROMPT_CACHE_HOME` when that variable points at a checkout, and otherwise prints install
+instructions rather than a traceback.
+
+`kit config prompt-cache.data <folder>` moves the database, which is the only thing kit knows about prompt-cache's
+internals — and it goes through the documented `PROMPT_CACHE_DATA` variable rather than any private arrangement.
+
+All this repo owes kit is a stable console-script name, arguments it can pass through, and a clean exit code.
 
 ## Security and privacy
 
