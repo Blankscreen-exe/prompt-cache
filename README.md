@@ -21,6 +21,10 @@ Copy a post, run `prompt-cache`, type a few letters, press Enter. The assembled 
 > **Status: in development.** The scaffold and database layer exist; prompts, search and fill do not yet.
 > See [docs/07-roadmap.md](docs/07-roadmap.md).
 
+## Preview
+
+![preview](/docs/images/preview.png)
+
 ## Why
 
 - **No folders, no file names, no save button.** You write; it saves. The first line is the title.
