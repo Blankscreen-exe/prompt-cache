@@ -13,6 +13,7 @@ import inspect
 from pathlib import Path
 
 import pytest
+from textual import events
 from textual.widgets import Input, OptionList, TextArea
 
 from prompt_cache import clipboard
@@ -112,6 +113,28 @@ class TestWritingAPrompt:
             await pilot.press("escape")
             await pilot.pause()
             assert prompt_store.list_live(conn) == []
+
+        drive(db_file, scenario)
+
+    def test_a_paste_that_arrives_while_the_app_is_blurred_still_lands(self, db_file, copied):
+        """Windows Terminal's "paste 5 KB?" dialog blurs the app, then sends the paste
+        before the focus-in. That paste must reach the editor, not vanish."""
+
+        async def scenario(app, pilot, conn):
+            await pilot.press(*"Seed")
+            await pilot.press("enter")
+            await pilot.pause()
+            area = app.screen.query_one("#editor-body", TextArea)
+
+            big = "a long pasted line of prompt text\n" * 200
+            app.post_message(events.AppBlur())
+            await pilot.pause()
+            app.post_message(events.Paste(big))
+            app.post_message(events.AppFocus())
+            await pilot.pause()
+
+            assert area.text == "Seed" + big
+            assert app.focused is area
 
         drive(db_file, scenario)
 
