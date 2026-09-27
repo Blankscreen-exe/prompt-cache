@@ -8,6 +8,7 @@ from __future__ import annotations
 import sqlite3
 from typing import ClassVar
 
+from textual import events
 from textual.app import App
 from textual.binding import Binding
 from textual.screen import Screen
@@ -35,3 +36,13 @@ class PromptCacheApp(App[None]):
 
     def get_default_screen(self) -> Screen:
         return SearchScreen()
+
+    async def on_event(self, event: events.Event) -> None:
+        # Textual clears focus on AppBlur and only restores it on AppFocus, or early for a
+        # Key or MouseDown. A terminal's "paste N KB?" confirmation blurs the app, and
+        # Windows Terminal then sends the paste *before* the focus-in, so the Paste found
+        # nothing focused and was silently dropped. Treat Paste like a keypress: it is proof
+        # the user is back, so restore focus first and let it reach the widget.
+        if isinstance(event, events.Paste) and not event.is_forwarded and not self.app_focus:
+            self.app_focus = True
+        await super().on_event(event)
